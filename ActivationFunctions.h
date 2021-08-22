@@ -5,6 +5,10 @@ namespace ExperiNet{
         return (float) std::tanh((double) x);
     }
 
+    float none (float x){
+        return x;
+    }
+
     float relu (float x){
         return x > 0 ? x : 0;
     }
