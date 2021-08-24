@@ -12,12 +12,11 @@ int main()
 {
     test();
 
-    auto network = new DenseFeedForwardNeuralNetwork(2, 2, 1, 1, costFunction);
-
 }
 
 void testFeedForwardNetworkEval(){
-    auto network = new DenseFeedForwardNeuralNetwork(2, 2, 2, 1);
+    CostFunctions::CostFunction* costFunction = new CostFunctions::MSE();
+    auto network = new feedForwardNeuralNetwork(2, 2, 2, 1, 1, 16, costFunction);
     std::vector<AbstractLayer*>* lays = &(network->layers);
 
     ExperiNet::Matrix weights1 = ExperiNet::Matrix(2, 2);
@@ -51,9 +50,9 @@ void testFeedForwardNetworkEval(){
 }
 
 void testFeedForwardNetworkBackpropagation(){
-    float (*costFunction)(float, float) = crossEntropy;
+    CostFunctions::CostFunction* costFunction = new CostFunctions::MSE();
 
-    auto network = new DenseFeedForwardNeuralNetwork(2, 2, 1, 1, costFunction);
+    auto network = new feedForwardNeuralNetwork(2, 2, 1, 1, 1, 16, costFunction);
 
     std::vector<AbstractLayer*>* lays = &(network->layers);
 
@@ -79,11 +78,12 @@ void testFeedForwardNetworkBackpropagation(){
     output << 0;
 
     ExperiNet::Vector err1 = Vector(2);
-    err1 << 0.019783, 0.00349301;
+    err1 << -0.0190885, -0.00337039;
     ExperiNet::Vector err2 = Vector(1);
-    err2 << 0.0719107;
+    err2 << -0.0693862;
 
-    network->train(&input, &output);
+    network->train(&input, &output, 1);
+    //network->printMatrices();
 
     if (!((((dynamic_cast<DenseLayer*>(lays->front()))->next)->next)->errors).isApprox(err2)){
         std::cout << "Feed Forward Network Back Propagation Test Failed!\n";
@@ -113,4 +113,41 @@ void test() {
     testLayerEval();
     testFeedForwardNetworkEval();
     testFeedForwardNetworkBackpropagation();
+}
+
+void sinBenchmark(){
+    CostFunctions::CostFunction* costFunction = new CostFunctions::MSE();
+    auto network = new feedForwardNeuralNetwork(costFunction, 0.3, 64);
+    network->add(new DenseLayer(1, 1));
+    network->add(new DenseLayer(1, 50, new ActivationFunctions::sigmoid()));
+    network->add(new DenseLayer(50, 1, new ActivationFunctions::sigmoid()));
+
+    std::vector<Vector> inputs;
+    std::vector<Vector> outputs;
+    Vector input = Vector(1);
+    Vector output = Vector(1);
+    for (float i = 0; i < 1; i += 0.01){
+
+        input(0) = i;
+        inputs.push_back(input);
+        output(0) = std::sin(i);
+        outputs.push_back(output);
+        /*
+       input(0) = i;
+       inputs.push_back(input);
+       output(0) = i*2;
+       outputs.push_back(output);
+         */
+    }
+    //std::copy(inputs.begin(), inputs.end(), std::ostream_iterator<Vector>(std::cout, " "));
+    //std::cout << "\n";
+    //std::copy(outputs.begin(), outputs.end(), std::ostream_iterator<Vector>(std::cout, " "));
+    //std::cout << "\n";
+
+    //network->printMatrices();
+
+    network->train(&inputs, &outputs, 5000, true);
+    network->printOutput();
+
+    float bestLoss = 0.000788322;
 }

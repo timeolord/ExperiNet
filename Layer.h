@@ -9,7 +9,8 @@ namespace ExperiNet {
 
     class AbstractLayer {
         virtual void getOutput() = 0;
-        virtual void print() = 0;
+        virtual void printMatrix() = 0;
+        virtual void printStructure() = 0;
     };
 
     class DenseLayer : public AbstractLayer {
@@ -17,6 +18,8 @@ namespace ExperiNet {
         int neurons;
 
         Matrix weights;
+        Matrix weightGradients;
+        std::vector<Matrix> gradients;
         Vector biases;
         Vector errors;
 
@@ -31,9 +34,10 @@ namespace ExperiNet {
         DenseLayer(int inputSize, int neurons, ActivationFunctions::ActivationFunction* activationFunction);
         ~DenseLayer();
         void getOutput() override;
-        void print() override;
+        void printMatrix() override;
+        void printStructure() override;
         void printOutput();
-        void getError();
+        void gradientDescent(float learningRate);
     };
 
     DenseLayer::~DenseLayer() {
@@ -43,7 +47,7 @@ namespace ExperiNet {
     DenseLayer::DenseLayer(int inputSize, int neurons)
     : weights(Matrix::Random(inputSize, neurons)), biases(Vector::Random(neurons)),
               previous(nullptr), next(nullptr), activations(Vector(neurons)), errors(Vector(neurons)), neurons(neurons),
-              weightedInputs (Vector(neurons)){
+              weightedInputs (Vector(neurons)), weightGradients(Matrix(neurons, inputSize)){
         this->activationFunction = new ActivationFunctions::identity();
     }
 
@@ -65,19 +69,27 @@ namespace ExperiNet {
         }
     }
 
-    void DenseLayer::print(){
+    void DenseLayer::printMatrix(){
         std::cout << "Weights:\n" << this->weights << "\n";
         std::cout << "Biases:\n" << this->biases << "\n";
         std::cout << "Activations:\n" << this->activations << "\n";
         std::cout << "Errors:\n" << this->errors << "\n";
+        std::cout << "Weight Gradients:\n" << this->weightGradients << "\n";
+    }
+
+    void DenseLayer::printStructure(){
+        std::cout << "Neurons: " << this->neurons << "\n";
+        std::cout << "Activation Function: " << this->activationFunction->name() << "\n";
     }
 
     void DenseLayer::printOutput(){
-        std::cout << "Input:\n" << this->activations << "\n";
+        std::cout << "Activation:\n" << this->activations << "\n";
     }
 
-    void DenseLayer::getError(){
-
+    void DenseLayer::gradientDescent(float learningRate){
+        Matrix difference = this->weightGradients * learningRate;
+        this->weights += difference.transpose();
+        this->biases += this->errors * learningRate;
     }
 }
 
