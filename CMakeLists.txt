@@ -3,4 +3,4 @@ project(StockTrader)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(StockTrader main.cpp Layer.h ActivationFunctions.h Network.h)
+add_executable(StockTrader main.cpp Layer.h ActivationFunctions.h Network.h CostFunctions.h)
