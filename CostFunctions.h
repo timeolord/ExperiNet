@@ -13,7 +13,7 @@ namespace ExperiNet{
         public:
             //remember to divide by n, the items of training data
             float cost(float output, float truth) override{
-                return (truth - output) * (truth - output);
+                return ((truth - output) * (truth - output))/2;
             }
             float derivative(float output, float truth) override{
                 return (truth - output);

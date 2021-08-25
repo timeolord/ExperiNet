@@ -1,2 +1,4 @@
 # Project exclude paths
 /cmake-build-debug/
+/mnist_test.csv
+/mnist_train.csv

@@ -19,27 +19,38 @@ namespace ExperiNet{
     public:
         int layerAmount;
         CostFunctions::CostFunction* cost;
+        ActivationFunctions::ActivationFunction* normalization;
         int minibatchSize;
         float learningRate;
+        float regularizationParameter;
+        int trainingSetSize;
 
-        feedForwardNeuralNetwork(CostFunctions::CostFunction* cost, float learningRate, int minibatchSize);
-        feedForwardNeuralNetwork(int layerAmount, int layerSize, int inputs, int outputs, float learningRate, int minibatchSize, CostFunctions::CostFunction* cost);
+        feedForwardNeuralNetwork(CostFunctions::CostFunction* cost, float learningRate, int minibatchSize,
+                                 float regularizationParameter);
+        feedForwardNeuralNetwork(int layerAmount, int layerSize, int inputs, int outputs, float learningRate,
+                                 int minibatchSize, CostFunctions::CostFunction* cost);
         Vector* evaluate(Vector* input);
         void printMatrices() override;
         void printStructure() override;
         void train(Vector *input, Vector *output, int epochs);
-        void train(std::vector<Vector>* input, std::vector<Vector>* output, int epochs, bool debug);
+        void train(std::vector<Vector>* input, std::vector<Vector>* output, int epochs, bool debug,
+                   ActivationFunctions::ActivationFunction* normalize);
         void backPropagate(Vector *output);
         void stochasticGradientDescent();
         void add(DenseLayer* layer);
         void printOutput();
-        float calculateLoss(std::vector<Vector>* input, std::vector<Vector>* output, int epochs);
+        void printDenormalizedOutput();
+        float calculateLoss(std::vector<Vector>* input, std::vector<Vector>* output);
+
+        void calculateGradients(DenseLayer *currentLayer) const;
     };
 
-    feedForwardNeuralNetwork::feedForwardNeuralNetwork(CostFunctions::CostFunction* cost, float learningRate, int minibatchSize){
+    feedForwardNeuralNetwork::feedForwardNeuralNetwork(CostFunctions::CostFunction* cost, float learningRate,
+                                                       int minibatchSize, float regularizationParameter){
         this->cost = cost;
         this->learningRate = learningRate;
         this->minibatchSize = minibatchSize;
+        this->regularizationParameter = regularizationParameter;
     }
 
     feedForwardNeuralNetwork::feedForwardNeuralNetwork(int layerAmount, int layerSize, int inputs,
@@ -192,22 +203,17 @@ namespace ExperiNet{
         DenseLayer* currentLayer = inputLayer;
 
         while (currentLayer->next != nullptr){
-            //Calculates the average gradient
-            for (int i = 0; i < currentLayer->weightGradients.rows(); i++){
-                for (int j = 0; j < currentLayer->weightGradients.cols(); j++){
-                    float average = 0;
-                    for (int k = 0; k < currentLayer->gradients.size(); k++){
-                        average += (currentLayer->gradients.at(k))(i, j);
-                    }
-                    average = average / minibatchSize;
-                    currentLayer->weightGradients(i, j) = average;
-                }
-            }
-            currentLayer->gradients.clear();
+            calculateGradients(currentLayer);
 
             currentLayer->next->gradientDescent(learningRate);
             currentLayer = currentLayer->next;
         }
+        calculateGradients(currentLayer);
+
+        currentLayer->gradientDescent(learningRate);
+    }
+
+    void feedForwardNeuralNetwork::calculateGradients(DenseLayer *currentLayer) const {
         //Calculates the average gradient
         for (int i = 0; i < currentLayer->weightGradients.rows(); i++){
             for (int j = 0; j < currentLayer->weightGradients.cols(); j++){
@@ -217,11 +223,12 @@ namespace ExperiNet{
                 }
                 average = average / minibatchSize;
                 currentLayer->weightGradients(i, j) = average;
+                //Regularizes the gradient
+                currentLayer->weightGradients(i, j) += currentLayer->weights(j, i) * (regularizationParameter /
+                                                                                      trainingSetSize);
             }
         }
         currentLayer->gradients.clear();
-
-        currentLayer->gradientDescent(learningRate);
     }
 
     void feedForwardNeuralNetwork::add(DenseLayer* layer) {
@@ -241,16 +248,43 @@ namespace ExperiNet{
         }
     }
 
-    void feedForwardNeuralNetwork::train(std::vector<Vector>* input, std::vector<Vector>* output, int epochs, bool debug) {
+    void feedForwardNeuralNetwork::train(std::vector<Vector>* input, std::vector<Vector>* output, int epochs, bool debug,
+                                         ActivationFunctions::ActivationFunction* normalize) {
+        this->trainingSetSize = input->size();
+        this->normalization = normalize;
+
+        if (normalize->name() != "identity"){
+            //Normalizes the input and output to prevent exploding gradients
+            for (int i = 0; i < trainingSetSize; i++){
+                Vector* inputVector = &input->at(i);
+                Vector* outputVector = &output->at(i);
+                for (int j = 0; j < inputSize; j++){
+                    (*inputVector)(j) = normalize->activation((*inputVector)(j));
+                }
+                for (int j = 0; j < outputSize; j++){
+                    (*outputVector)(j) = normalize->activation((*outputVector)(j));
+                }
+            }
+        }
+
+
+        if (input->size() != output->size()){
+            std::cout << "Input and Output sizes don't match!\n";
+            return;
+        }
 
         std::random_device randomDevice; // obtain a random number from hardware
         std::mt19937 generator(randomDevice()); // seed the generator
         std::uniform_int_distribution<> distribution(0, input->size() - 1);
 
-        for (int j = 0; j < epochs; j++){
-            if (debug && j % (epochs / 10) == 1){
-                float temp = calculateLoss(input, output, 10);
-                std::cout << "Loss after " << j << " epochs: " << temp << "\n";
+        for (int j = 0; j < epochs * trainingSetSize; j++){
+            if (debug && epochs < 10){
+                float temp = calculateLoss(input, output);
+                std::cout << "Loss after " << j/trainingSetSize << " epochs: " << temp << "\n";
+            }
+            else if (debug && j % ((epochs * trainingSetSize) / 10) == 1){
+                float temp = calculateLoss(input, output);
+                std::cout << "Loss after " << j/trainingSetSize << " epochs: " << temp << "\n";
             }
             for(int i = 0; i < minibatchSize; i++){
                 int randomNumber = distribution(generator);
@@ -260,8 +294,23 @@ namespace ExperiNet{
             this->stochasticGradientDescent();
         }
         if (debug){
-            float temp = calculateLoss(input, output, 10);
+            float temp = calculateLoss(input, output);
             std::cout << "Final Loss: " << temp << "\n";
+        }
+
+
+        if (normalize->name() != "identity"){
+            //Denormalizes the input and output to prevent exploding gradients
+            for (int i = 0; i < trainingSetSize; i++){
+                Vector* inputVector = &input->at(i);
+                Vector* outputVector = &output->at(i);
+                for (int j = 0; j < inputSize; j++){
+                    (*inputVector)(j) = normalize->inverse((*inputVector)(j));
+                }
+                for (int j = 0; j < outputSize; j++){
+                    (*outputVector)(j) = normalize->inverse((*outputVector)(j));
+                }
+            }
         }
     }
 
@@ -272,14 +321,29 @@ namespace ExperiNet{
         dynamic_cast<DenseLayer*>(this->layers.back())->printOutput();
     }
 
-    float feedForwardNeuralNetwork::calculateLoss(std::vector<Vector>* input, std::vector<Vector>* output, int epochs) {
+    void feedForwardNeuralNetwork::printDenormalizedOutput() {
+        std::cout << "Input:\n";
+        Vector* inputVector = &dynamic_cast<DenseLayer*>(this->layers.front())->activations;
+        for (int j = 0; j < inputSize; j++){
+            (*inputVector)(j) = this->normalization->inverse((*inputVector)(j));
+        }
+        dynamic_cast<DenseLayer*>(this->layers.front())->printOutput();
+        std::cout << "Output:\n";
+        Vector* outputVector = &dynamic_cast<DenseLayer*>(this->layers.back())->activations;
+        for (int j = 0; j < outputSize; j++){
+            (*outputVector)(j) = this->normalization->inverse((*outputVector)(j));
+        }
+        dynamic_cast<DenseLayer*>(this->layers.back())->printOutput();
+    }
+
+    float feedForwardNeuralNetwork::calculateLoss(std::vector<Vector>* input, std::vector<Vector>* output) {
 
         std::random_device randomDevice;
         std::mt19937 generator(randomDevice());
         std::uniform_int_distribution<> distribution(0, input->size() - 1);
 
         float outsideAverage = 0;
-        for(int i = 0; i < epochs; i++){
+        for(int i = 0; i < input->size(); i++){
             float insideAverage = 0;
             int randomNumber = distribution(generator);
             Vector tempOutput = *(this->evaluate(&input->at(randomNumber)));
@@ -289,6 +353,6 @@ namespace ExperiNet{
             insideAverage = insideAverage / tempOutput.size();
             outsideAverage += insideAverage;
         }
-        return outsideAverage / epochs;
+        return outsideAverage / input->size();
     }
 }

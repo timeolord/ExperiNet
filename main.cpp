@@ -3,6 +3,7 @@
 #include "Network.h"
 #include "CostFunctions.h"
 
+
 using namespace Eigen;
 using namespace ExperiNet;
 
@@ -10,7 +11,38 @@ void test();
 
 int main()
 {
-    test();
+    CostFunctions::CostFunction* costFunction = new CostFunctions::MSE();
+    auto network = new feedForwardNeuralNetwork(costFunction, 0.001, 16, 1);
+    network->add(new DenseLayer(1, 4));
+    network->add(new DenseLayer(4, 50, new ActivationFunctions::lrelu()));
+    network->add(new DenseLayer(50, 50, new ActivationFunctions::lrelu()));
+    network->add(new DenseLayer(50, 1, new ActivationFunctions::lrelu()));
+
+    std::vector<Vector> inputs;
+    std::vector<Vector> outputs;
+
+    Vector input = Vector(4);
+    Vector output = Vector(1);
+
+    std::random_device randomDevice;
+    std::mt19937 generator(randomDevice());
+    std::uniform_int_distribution<> distribution(1, 5);
+
+
+    for (float i = 0; i < 500; i++){
+        input(0) = distribution(generator);
+        input(1) = distribution(generator);
+        input(2) = distribution(generator);
+        input(3) = distribution(generator);
+        inputs.push_back(input);
+        output(0) = (input(0) * input(3)) - (input(1) * input(2));
+        outputs.push_back(output);
+    }
+
+    network->train(&inputs, &outputs, 100, true, new ActivationFunctions::identity());
+    network->printOutput();
+    //network->printDenormalizedOutput();
+    //network->printMatrices();
 
 }
 
@@ -117,7 +149,7 @@ void test() {
 
 void sinBenchmark(){
     CostFunctions::CostFunction* costFunction = new CostFunctions::MSE();
-    auto network = new feedForwardNeuralNetwork(costFunction, 0.3, 64);
+    auto network = new feedForwardNeuralNetwork(costFunction, 0.3, 64, 0);
     network->add(new DenseLayer(1, 1));
     network->add(new DenseLayer(1, 50, new ActivationFunctions::sigmoid()));
     network->add(new DenseLayer(50, 1, new ActivationFunctions::sigmoid()));
@@ -146,7 +178,7 @@ void sinBenchmark(){
 
     //network->printMatrices();
 
-    network->train(&inputs, &outputs, 5000, true);
+    network->train(&inputs, &outputs, 5000, true, new ActivationFunctions::identity());
     network->printOutput();
 
     float bestLoss = 0.000788322;
